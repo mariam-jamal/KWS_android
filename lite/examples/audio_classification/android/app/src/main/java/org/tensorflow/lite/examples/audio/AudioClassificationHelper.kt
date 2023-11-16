@@ -20,16 +20,13 @@ import android.content.Context
 import android.media.AudioRecord
 import android.os.SystemClock
 import android.util.Log
-import org.tensorflow.lite.DataType
-import java.util.concurrent.ScheduledThreadPoolExecutor
-import java.util.concurrent.TimeUnit
+import com.jlibrosa.audio.JLibrosa
 import org.tensorflow.lite.examples.audio.fragments.AudioClassificationListener
 import org.tensorflow.lite.support.audio.TensorAudio
-import org.tensorflow.lite.support.tensorbuffer.TensorBuffer
 import org.tensorflow.lite.task.audio.classifier.AudioClassifier
 import org.tensorflow.lite.task.core.BaseOptions
-import java.lang.Integer.max
-import java.lang.Math.min
+import java.util.concurrent.ScheduledThreadPoolExecutor
+import java.util.concurrent.TimeUnit
 
 class AudioClassificationHelper(
   val context: Context,
@@ -180,6 +177,9 @@ class AudioClassificationHelper(
     private fun classifyAudio() {
         try {
             tensorAudio.load(recorder)
+            val jLibrosa = JLibrosa()
+            val mfccValues = jLibrosa.generateMFCCFeatures(tensorAudio.tensorBuffer.floatArray, 44100, 10)
+
             /*// Preprocess the audio waveform to get the feature vector
             val featureVector = preprocessAudio(tensorAudio.tensorBuffer.floatArray)
 
@@ -190,6 +190,7 @@ class AudioClassificationHelper(
             // Create a TensorAudio object with the correct shape and sample rate
             val tensorAudio = classifier.createInputTensorAudio()
             tensorAudio.load(tensorBuffer.floatArray)*/
+
 
             // Perform inference using the feature vector
             var inferenceTime = SystemClock.uptimeMillis()
