@@ -20,23 +20,22 @@ import android.content.Context
 import android.media.AudioRecord
 import android.os.SystemClock
 import android.util.Log
-import com.jlibrosa.audio.JLibrosa
+import java.util.concurrent.ScheduledThreadPoolExecutor
+import java.util.concurrent.TimeUnit
 import org.tensorflow.lite.examples.audio.fragments.AudioClassificationListener
 import org.tensorflow.lite.support.audio.TensorAudio
 import org.tensorflow.lite.task.audio.classifier.AudioClassifier
 import org.tensorflow.lite.task.core.BaseOptions
-import java.util.concurrent.ScheduledThreadPoolExecutor
-import java.util.concurrent.TimeUnit
 
 class AudioClassificationHelper(
-  val context: Context,
-  val listener: AudioClassificationListener,
-  var currentModel: String = YAMNET_MODEL,
-  var classificationThreshold: Float = DISPLAY_THRESHOLD,
-  var overlap: Float = DEFAULT_OVERLAP_VALUE,
-  var numOfResults: Int = DEFAULT_NUM_OF_RESULTS,
-  var currentDelegate: Int = 0,
-  var numThreads: Int = 2
+    val context: Context,
+    val listener: AudioClassificationListener,
+    var currentModel: String = SPEECH_COMMAND_MODEL,
+    var classificationThreshold: Float = DISPLAY_THRESHOLD,
+    var overlap: Float = DEFAULT_OVERLAP_VALUE,
+    var numOfResults: Int = DEFAULT_NUM_OF_RESULTS,
+    var currentDelegate: Int = 0,
+    var numThreads: Int = 2
 ) {
     private lateinit var classifier: AudioClassifier
     private lateinit var tensorAudio: TensorAudio
@@ -115,93 +114,12 @@ class AudioClassificationHelper(
             TimeUnit.MILLISECONDS)
     }
 
-    private fun preprocessAudio(waveform: FloatArray): FloatArray {
-        val sampleRate = 8000 // Sample rate
-        val sampleTime = 2.0
-        val nfft = 512 // Number of FFT points
-        val nhop = 400 // Number of audio samples between FFTs
-        val cutoffFreq = 4000
-        val numAvgBins = 8 // Number of bins to average together in FFT
-
-        val paddedWaveform = waveform.copyOf(16000)
-
-        val stftNSlices = (kotlin.math.ceil(((sampleTime * sampleRate) / nhop) -
-                (nfft / nhop)) + 1).toInt()
-        val stftMaxBin = ((nfft / 2) / ((sampleRate / 2) / cutoffFreq)).toInt()
-
-        val stft = Array(stftNSlices) { FloatArray((stftMaxBin) / numAvgBins) }
-
-        for (i in 0..stftNSlices) {
-            val winStart = i * nhop
-            val winStop = (i * nhop) + nfft
-
-            var window = paddedWaveform.copyOfRange(winStart, winStop)
-            if (window.size < nfft) {
-                val padding = FloatArray(nfft - window.size)
-                window += padding
-            }
-
-            // Apply Hanning window
-            for (j in window.indices) {
-                window[j] = (window[j] * 0.5 * (1 - kotlin.math.cos(2 * Math.PI * j / (nfft - 1)))).toInt()
-                    .toFloat()
-            }
-
-            // Compute FFT
-            val fft = FloatArray(nfft / 2)
-            for (j in 0 until nfft / 2) {
-                var sum = 0.0
-                for (k in 0 until nfft) {
-                    sum += window[k] * kotlin.math.cos(2 * Math.PI * j * k / nfft)
-                }
-                fft[j] = kotlin.math.sqrt(sum.toFloat() * 2).toFloat() // magnitude
-            }
-
-            // Only keep the frequency bins we care about
-            val filteredFFT = fft.sliceArray(1 until stftMaxBin)
-
-            // Average every numAvgBins bins together to reduce the size of FFT
-            for (j in stft[i].indices) {
-                stft[i][j] = (filteredFFT.sliceArray(j * numAvgBins until 255.coerceAtMost((j + 1) * numAvgBins))
-                    .average() / nfft).toFloat() // Normalize
-            }
-        }
-
-        // Flatten the 2D array to 1D array using flatMap
-        val flattenedStft = stft.flatMap { it.asIterable() }.toFloatArray()
-
-        return flattenedStft
-    }
-
-    // Inside your classifyAudio method
     private fun classifyAudio() {
-        try {
-            tensorAudio.load(recorder)
-            val jLibrosa = JLibrosa()
-            val mfccValues = jLibrosa.generateMFCCFeatures(tensorAudio.tensorBuffer.floatArray, 44100, 10)
-
-            /*// Preprocess the audio waveform to get the feature vector
-            val featureVector = preprocessAudio(tensorAudio.tensorBuffer.floatArray)
-
-            // Create a TensorBuffer object from the feature vector
-            val tensorBuffer = TensorBuffer.createFixedSize(intArrayOf(1, featureVector.size), DataType.FLOAT32)
-            tensorBuffer.loadArray(featureVector, intArrayOf(featureVector.size))
-
-            // Create a TensorAudio object with the correct shape and sample rate
-            val tensorAudio = classifier.createInputTensorAudio()
-            tensorAudio.load(tensorBuffer.floatArray)*/
-
-
-            // Perform inference using the feature vector
-            var inferenceTime = SystemClock.uptimeMillis()
-            val output = classifier.classify(tensorAudio)
-            inferenceTime = SystemClock.uptimeMillis() - inferenceTime
-            listener.onResult(output[0].categories, inferenceTime)
-        } catch (e: Exception){
-            e.printStackTrace()
-        }
-
-
+        tensorAudio.load(recorder)
+        var inferenceTime = SystemClock.uptimeMillis()
+        val output = classifier.classify(tensorAudio)
+        inferenceTime = SystemClock.uptimeMillis() - inferenceTime
+        listener.onResult(output[0].categories, inferenceTime)
     }
 
     fun stopAudioClassification() {
@@ -213,9 +131,10 @@ class AudioClassificationHelper(
         const val DELEGATE_CPU = 0
         const val DELEGATE_NNAPI = 1
         const val DISPLAY_THRESHOLD = 0.3f
-        const val DEFAULT_NUM_OF_RESULTS = 2
+        const val DEFAULT_NUM_OF_RESULTS = 3
         const val DEFAULT_OVERLAP_VALUE = 0.5f
-        const val YAMNET_MODEL = "model_f1score_float16_meta.tflite"
-        const val SPEECH_COMMAND_MODEL = "speech.tflite"
+        const val YAMNET_MODEL = "yamnet.tflite"
+        const val SPEECH_COMMAND_MODEL = "model_pless_sweep_convmel_float32.tflite"
+        //const val SPEECH_COMMAND_MODEL = "speech.tflite"
     }
 }
